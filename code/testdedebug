@@ -1,0 +1,347 @@
+import random
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+import re
+
+df = pd.read_csv('2013-2014.csv')
+n = df.last_valid_index()
+
+PARAMETRES = ['FTHG','FTAG','FTR','HTHG','HTAG','HTR','HS','AS','HST','AST','HF','AF','HC','AC','HY','AY','HR','AR','B365H','B365D','B365A','BWH','BWD','BWA','IWH','IWD','IWA','LBH','LBD','LBA','PSH','PSD','PSA','WHH','WHD','WHA','SJH','SJD','SJA','VCH','VCD','VCA','Bb1X2','BbMxH','BbAvH','BbMxD','BbAvD','BbMxA','BbAvA','BbOU','BbMx>2.5','BbAv>2.5','BbMx<2.5','BbAv<2.5','BbAH','BbAHh','BbMxAHH','BbAvAHH','BbMxAHA','BbAvAHA','PSCH','PSCD','PSCA']
+
+ENTREES = ['HTHG','HTAG','HTR','AwayTeam','HomeTeam']
+
+SORTIES = ['FTR']
+
+df.loc[df['FTR'] == 'H',['FTR']] = float(2.0)
+df.loc[df['FTR'] == 'D',['FTR']] = float(1.0)
+df.loc[df['FTR'] == 'A',['FTR']] = float(0.0)
+df.loc[df['HTR'] == 'H',['HTR']] = float(2.0)
+df.loc[df['HTR'] == 'D',['HTR']] = float(1.0)
+df.loc[df['HTR'] == 'A',['HTR']] = float(0.0)
+
+for param in PARAMETRES :
+    df.loc[df[param].isnull(),param] = np.round(df[param].mean())
+
+for i in range(0,n+1):
+    l=0
+    for r in range (0,len(df['HomeTeam'].iloc[i])):
+        l =+ float(ord((df['HomeTeam'].iloc[i])[r])*r)
+    df['HomeTeam'].iloc[i] = l
+
+for i in range(0,n+1):
+    l=0
+    for r in range (0,len(df['AwayTeam'].iloc[i])):
+        l =+ float(ord((df['AwayTeam'].iloc[i])[r])*r)
+    df['AwayTeam'].iloc[i] = l
+    
+df.isna().sum()
+
+df = df.sample(frac=1, random_state=217)
+
+X_train = df[ENTREES][:int(n*0.8)]
+Y_train = df[SORTIES][:int(n*0.8)]
+X_test = df[ENTREES][int(n*0.8):]
+Y_test = df[SORTIES][int(n*0.8):].values
+
+def entropy(p):
+    if p == 0:
+        return 0
+    elif p == 1:
+        return 0
+    else:
+        return (- (p * np.log2(p) + (1 - p) * np.log2(1-p)))
+
+def information_gain(left_child, right_child):
+    parent = left_child + right_child
+    p_parent = parent.count(1) / len(parent) if len(parent) > 0 else 0
+    p_left = left_child.count(1) / len(left_child) if len(left_child) > 0 else 0
+    p_right = right_child.count(1) / len(right_child) if len(right_child) > 0 else 0
+    IG_p = entropy(p_parent)
+    IG_l = entropy(p_left)
+    IG_r = entropy(p_right)
+    return IG_p - (len(left_child) / len(parent) * IG_l) - (len(right_child) / len(parent) * IG_r)
+
+def predict_tree(tree, X_test):
+    feature_idx = tree['feature_idx']
+
+    if X_test[feature_idx] <= tree['split_point']:
+        if type(tree['left_split']) == dict:
+            return predict_tree(tree['left_split'], X_test)
+        else:
+            value = tree['left_split']
+            return value
+    else:
+        if type(tree['right_split']) == dict:
+            return predict_tree(tree['right_split'], X_test)
+        else:
+            return tree['right_split']
+        
+def draw_bootstrap(X_train, Y_train):
+    bootstrap_indices = list(np.random.choice(range(len(X_train)), len(X_train), replace = True))
+    oob_indices = [i for i in range(len(X_train)) if i not in bootstrap_indices]
+    X_bootstrap = X_train.iloc[bootstrap_indices].values
+    Y_bootstrap = Y_train[bootstrap_indices]
+    X_oob = X_train.iloc[oob_indices].values
+    Y_oob = Y_train[oob_indices]
+    return X_bootstrap, Y_bootstrap, X_oob, Y_oob
+
+def oob_score(tree, X_test, Y_test):
+    mis_label = 0
+    for i in range(len(X_test)):
+        pred = predict_tree(tree, X_test[i])
+        if pred != Y_test[i]:
+            mis_label += 1
+    return mis_label / len(X_test)
+
+def find_split_point(X_bootstrap, Y_bootstrap, max_features):
+    feature_ls = list()
+    num_features = len(X_bootstrap[0])
+
+    while len(feature_ls) <= max_features:
+        feature_idx = random.sample(range(num_features), 1)
+        if feature_idx not in feature_ls:
+            feature_ls.extend(feature_idx)
+
+    best_info_gain = -999
+    node = None
+    for feature_idx in feature_ls:
+        for split_point in X_bootstrap[:,feature_idx]:
+            left_child = {'X_bootstrap': [], 'Y_bootstrap': []}
+            right_child = {'X_bootstrap': [], 'Y_bootstrap': []}
+
+            # split children for continuous variables
+            if (type(split_point) in [int, float]):
+                for i, value in enumerate(X_bootstrap[:,feature_idx]):
+                    if value <= split_point:
+                        left_child['X_bootstrap'].append(X_bootstrap[i])
+                        left_child['Y_bootstrap'].append(Y_bootstrap[i])
+                    else:
+                        right_child['X_bootstrap'].append(X_bootstrap[i])
+                        right_child['Y_bootstrap'].append(Y_bootstrap[i])
+            # split children for categoric variables
+            else:
+                for i, value in enumerate(X_bootstrap[:,feature_idx]):
+                    if value == split_point:
+                        left_child['X_bootstrap'].append(X_bootstrap[i])
+                        left_child['Y_bootstrap'].append(Y_bootstrap[i])
+                    else:
+                        right_child['X_bootstrap'].append(X_bootstrap[i])
+                        right_child['Y_bootstrap'].append(Y_bootstrap[i])
+
+            split_info_gain = information_gain(left_child['Y_bootstrap'], right_child['Y_bootstrap'])
+            if split_info_gain > best_info_gain:
+                best_info_gain = split_info_gain
+                left_child['X_bootstrap'] = np.array(left_child['X_bootstrap'])
+                right_child['X_bootstrap'] = np.array(right_child['X_bootstrap'])
+                node = {'information_gain': split_info_gain,
+                        'left_child': left_child,
+                        'right_child': right_child,
+                        'split_point': split_point,
+                        'feature_idx': feature_idx}
+    return node
+
+def terminal_node(node):
+    Y_bootstrap = node['Y_bootstrap']
+    pred = max(Y_bootstrap, key = Y_bootstrap.count)
+    return pred
+
+def split_node(node, max_features, min_samples_split, max_depth, depth):
+    left_child = node['left_child']
+    right_child = node['right_child']
+
+    del(node['left_child'])
+    del(node['right_child'])
+
+    if len(left_child['Y_bootstrap']) == 0 or len(right_child['Y_bootstrap']) == 0:
+        empty_child = {'Y_bootstrap': left_child['Y_bootstrap'] + right_child['Y_bootstrap']}
+        node['left_split'] = terminal_node(empty_child)
+        node['right_split'] = terminal_node(empty_child)
+        return node
+
+    if depth >= max_depth:
+        node['left_split'] = terminal_node(left_child)
+        node['right_split'] = terminal_node(right_child)
+        return node
+
+    if len(left_child['X_bootstrap']) <= min_samples_split:
+        node['left_split'] = node['right_split'] = terminal_node(left_child)
+    else:
+        node['left_split'] = find_split_point(left_child['X_bootstrap'], left_child['Y_bootstrap'], max_features)
+        split_node(node['left_split'], max_depth, min_samples_split, max_depth, depth + 1)
+    if len(right_child['X_bootstrap']) <= min_samples_split:
+        node['right_split'] = node['left_split'] = terminal_node(right_child)
+    else:
+        node['right_split'] = find_split_point(right_child['X_bootstrap'], right_child['Y_bootstrap'], max_features)
+        split_node(node['right_split'], max_features, min_samples_split, max_depth, depth + 1)
+        
+        
+def build_tree(X_bootstrap, Y_bootstrap, max_depth, min_samples_split, max_features):
+    root_node = find_split_point(X_bootstrap, Y_bootstrap, max_features)
+    split_node(root_node, max_features, min_samples_split, max_depth, 1)
+    return root_node
+
+def random_forest(X_train, Y_train, n_estimators, max_features, max_depth, min_samples_split):
+    tree_ls = list()
+    oob_ls = list()
+    print("hello world2")
+    for i in range(n_estimators):
+        X_bootstrap, Y_bootstrap, X_oob, Y_oob = draw_bootstrap(X_train, Y_train)
+        tree = build_tree(X_bootstrap, Y_bootstrap, max_features, max_depth, min_samples_split)
+        tree_ls.append(tree)
+        oob_error = oob_score(tree, X_oob, Y_oob)
+        oob_ls.append(oob_error)
+    print("OOB estimate: {:.2f}".format(np.mean(oob_ls)))
+    return tree_ls
+
+def predict_rf(tree_ls, X_test):
+    pred_ls = list()
+    for i in range(len(X_test)):
+        ensemble_preds = [predict_tree(tree, X_test.values[i]) for tree in tree_ls]
+        final_pred = max(ensemble_preds, key = ensemble_preds.count)
+        pred_ls.append(final_pred)
+    return np.array(pred_ls)
+
+n_estimators = 7
+max_features = 6
+max_depth = 15
+min_samples_split = 3
+
+class DecisionTree:
+    def __init__(self, max_depth=None, min_samples_split=2, min_samples_leaf=1):
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.tree = None
+
+    def fit(self, X, y):
+        self.tree = self._build_tree(X, y, depth=0)
+
+    def _build_tree(self, X, y, depth):
+        num_samples , _ = X.shape
+        unique_classes = np.unique(y)
+
+        # Stopping conditions
+        if ((depth == self.max_depth) | (len(unique_classes) == 1) | (num_samples < self.min_samples_split)):
+            return {'class': self._most_common_class(y)}
+
+        # Find the best split
+        best_split = self._find_best_split(X, y)
+
+        if ((best_split== (None,None))) :
+            return {'class': self._most_common_class(y)}
+        feature_index, threshold = best_split
+        left_indices = X.iloc[:, feature_index] <= threshold
+        right_indices = ~left_indices
+
+        # Recursively build left and right subtrees
+        left_tree = self._build_tree(X[left_indices], y[left_indices], depth + 1)
+        right_tree = self._build_tree(X[right_indices], y[right_indices], depth + 1)
+
+        return {'feature_index': feature_index, 'threshold': threshold,
+                'left': left_tree, 'right': right_tree}
+
+    def _find_best_split(self, X, y):
+        num_samples, num_features = X.shape
+
+        if (num_samples < self.min_samples_split):
+            return (None,None)
+
+        feature_indices = np.arange(num_features)
+        np.random.shuffle(feature_indices)
+
+        best_split = (None,None)
+        best_entropy = float('inf')
+
+        for feature_index in feature_indices[:num_features // 2]:
+            unique_values = np.unique(X.iloc[:, feature_index])
+            thresholds = (unique_values[:-1] + unique_values[1:]) / 2
+
+            for threshold in thresholds:
+                left_indices = X.iloc[:, feature_index] <= threshold
+                right_indices = ~left_indices
+
+                entropy = self._calculate_entropy(y[left_indices], y[right_indices])
+                if (entropy < best_entropy):
+                    best_entropy = entropy
+                    best_split = (feature_index, threshold)
+
+        return best_split
+
+    def _calculate_entropy(self, y_left, y_right):
+        left_size, right_size = len(y_left), len(y_right)
+        total_size = left_size + right_size
+        entropy_left=0
+        entropy_right = 0
+        for c in np.unique(y_left):
+            if (np.sum(y_left == c) > 0).any():
+                entropy_left += - (np.sum(y_left == c) / left_size) * np.log2(np.sum(y_left == c) / left_size)
+        for c in np.unique(y_right):
+            if (np.sum(y_right == c) > 0).any():
+                entropy_right += - (np.sum(y_right == c) / right_size) * np.log2(np.sum(y_right == c) / right_size)
+        match = re.search(r'\d+', str(entropy_left))
+        entropy_left = float(match.group())
+        match = re.search(r'\d+', str(entropy_right))
+        entropy_right = float(match.group())
+        entropy = (left_size / total_size) * entropy_left + (right_size / total_size) * entropy_right
+        return entropy
+
+    def _most_common_class(self, y):
+        if(len(y)==0):
+            return 0
+        return np.argmax(np.bincount(y['FTR']))
+
+    def predict_instance(self, instance):
+        if (self.tree == None):
+            raise ValueError("The tree has not been trained yet.")
+
+        current_node = self.tree
+        while 'class' not in current_node:
+            if instance[current_node['feature_index']] <= current_node['threshold']:
+                current_node = current_node['left']
+            else:
+                current_node = current_node['right']
+
+        return current_node['class']
+
+
+class RandomForest:
+    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.forest = []
+
+    def fit(self, X, y):
+        self.forest = []
+        for _ in range(self.n_estimators):
+            # Randomly sample with replacement for each tree
+            sample_indices = np.random.choice(len(X), size=len(X), replace=True)
+            X_sampled = X.iloc[sample_indices]
+            y_sampled = y.iloc[sample_indices]
+
+            # Create and train a decision tree
+            tree = DecisionTree(
+                max_depth=self.max_depth,
+                min_samples_split=self.min_samples_split,
+                min_samples_leaf=self.min_samples_leaf
+            )
+            tree.fit(X_sampled, y_sampled)
+
+            # Append the trained tree to the forest
+            self.forest.append(tree)
+
+    def predict(self, X,tree):
+        # Make predictions for each tree in the forest
+        predictions = np.array([tree.predict_instance(X.iloc[i]) for i in range(len(X))])
+
+        # Use majority voting to get the final prediction
+        final_predictions = np.apply_along_axis(lambda x: np.bincount(x).argmax(), axis=0, arr=predictions)
+
+        return final_predictions
+    
+random_forest = RandomForest(n_estimators=100)
+
+random_forest.fit(X_train, Y_train)    
+print("hello world")
