@@ -232,7 +232,7 @@ float* informationGain(int* indices,int card,int param,float data[MAX_ROWS][MAX_
 }
 
 Noeud* trouverPointdeSplit(int params[],int indices[], int card_donnee,int cardParam,int hauteur,float data[MAX_ROWS][MAX_COLS])
-{ //params contient l'ensemble des indices considérés pour créer un arbre donné, indices l'ensemble des indices que l'on considère
+{ //params contient l'ensemble des indices des paramètres considérés pour créer un arbre donné, indices l'ensemble des indices des données que l'on considère
     float Gain_max = 0.0;                                                   
     int indgainmax = 0;
     float* ind_gain = malloc(sizeof(float)*(card_donnee+3));
