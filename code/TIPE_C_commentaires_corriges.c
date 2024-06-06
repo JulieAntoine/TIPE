@@ -10,17 +10,17 @@
 #define MAX_ROWS 380 // Nombre maximum de lignes dans le fichier CSV
 #define MAX_COLS 65  // Nombre maximum de colonnes dans le fichier CSV
 #define MAX_LINE_LENGTH 65
-//on représente une victoire par un 2,un match nul par 1 et une défaite par un 0 dans la colonne [4]
+//on représente une victoire par un 2,un match nul par un 1 et une défaite par un 0 dans la colonne [4]
 // structures
 
 struct Noeud 
 {
     int* indexDonnee;   //tableau contenant les indices des données prises en compte
     int cardDonnee;     //taille de index_donnee
-    float seuil;        //Seuil permettra de parcourir l'abre créé
+    float seuil;        //seuil permettra de parcourir l'abre créé
     int* indParams;     //tableau contenant les indices des paramétres pris en compte
-    int cardParam;      //taille de IndParams
-    int paramSplit;     //Indices du paramétre dans IndParam sur lequel on sépare pour aller à fg ou fd
+    int cardParam;      //taille de indParams
+    int paramSplit;     //indices du paramétre dans IndParam sur lequel on sépare pour aller à fg ou fd
     int hauteur;        //hauteur permet de connaitre où on se trouve dans l'abre
     bool feuille;       //permet de savoir si on se trouve sur une feuille lors d'un parcours
     struct Noeud* gauche;
@@ -31,9 +31,9 @@ typedef struct Noeud Noeud;
 
 struct AbrDecision 
 {
-    int profondeurMax;        //Permet de connaitre la profondeur maximum de parcours
-    int nbSeparationMin;      //Permet d'éviter d'avoir des arbres de taille trop faible
-    int nbFeuilleMin;         //Pour éviter les abres de trop faible dispersion
+    int profondeurMax;        //permet de connaitre la profondeur maximum de parcours
+    int nbSeparationMin;      //permet d'éviter d'avoir des arbres de taille trop faible
+    int nbFeuilleMin;         //pour éviter les abres de trop faible dispersion
     int* oobIndices;          //tableau des indices hors boite pour cet arbre
     int card;                 //cardinal de oob
     Noeud* racine;
@@ -42,7 +42,7 @@ typedef struct AbrDecision AbrDecision;
 
 struct Foretalea
 {
-    int nbEstimateur;       //Nombre d'arbre souhaité
+    int nbEstimateur;       //nombre d'arbres souhaités
     int profMax;            //profondeur maximale par arbre
     int nbSeparationMin;  
     int nbFeuilleMin;
@@ -130,7 +130,7 @@ Noeud* creerNoeud(int* index, int cardIndex, float separatrice, int* IndParams, 
 
 float entropy(int* indices, int card,float data[MAX_ROWS][MAX_COLS]) 
 {   
-    //indices contient les indices de tout les éléments considérés et card en est le nombre
+   //indices contient les indices de tout les éléments considérés et card en est le nombre
    float vict = 0.0;
    for (int i = 0; i<card ;i++)
    {
@@ -150,15 +150,15 @@ float entropy(int* indices, int card,float data[MAX_ROWS][MAX_COLS])
 }
 float* informationGain(int* indices,int card,int param,float data[MAX_ROWS][MAX_COLS])
 {//indices contient les indices dans table de l'ensemble qu'on considère, card son cardinal, param l'indice du paramètre par rapport 
-//auquel on considére le split
+ //auquel on considére le split
     float HS = entropy(indices,card,data); //entropie du parent
     float separatrice = 0;
-    for (int i =0; i<card; i++) //on calcule la moyenne du paramètre choisi pour le split 
+    for (int i =0; i<card; i++) //on calcule la moyenne du paramètre choisi pour la séparation
     {     
         separatrice += (float)data[i][param];
     }
     separatrice = separatrice/(float)card;
-    //permet de connaitre quel élément de indices ira a gauche et lequel à droite
+    //permet de connaitre quel élément de indices ira à gauche et lequel à droite
     int *supsou = malloc(sizeof(int)*card); 
     assert(supsou);
     int moins = 0;
@@ -208,7 +208,7 @@ float* informationGain(int* indices,int card,int param,float data[MAX_ROWS][MAX_
     free(supsou);
     //calcul du gain d'information
     float res = HS - ((float)moins/(float)card)*entropy(ind_moins,moins,data) -((float)plus/(float)card)*entropy(ind_plus,plus,data) -entropy(ind_egal,egal,data);
-     //on stocke toutes les informations intéressante dans un tableau pour ne pas réeffectuer le calcul dans la prochaine fonction
+     //on stocke toutes les informations intéressantes dans un tableau pour ne pas réeffectuer le calcul dans la prochaine fonction
     float* tabres = malloc(sizeof(float)*(moins+plus+egal+5));
     assert(tabres);
     tabres[0] = res;
@@ -293,13 +293,13 @@ Noeud* trouverPointdeSplit(int params[],int indices[], int card_donnee,int cardP
 
 Noeud* creaParcourNoeud(Noeud* racine, int prof_max,float data[MAX_ROWS][MAX_COLS])
 {
-    //si la profondeur max est atteinte ou s'il n'y a plus assez de données ou de paramètres on arréte de split
+    //si la profondeur max est atteinte ou s'il n'y a plus assez de données ou de paramètres on arréte de séparer
     if (racine->hauteur == prof_max || racine->cardDonnee == 1||racine->cardDonnee==0||racine->cardParam==0) 
     {
         return racine;
     }
     else 
-    {   //Sinon on a affecté à fils droit et fils gauche la valeur de leur split (split renvoie le Noeud dont les fils sont les deux ensembles obtenus)
+    {   //sinon on a affecté à fils droit et fils gauche la valeur de leur split (split renvoie le Noeud dont les fils sont les deux ensembles obtenus)
         Noeud* fils = trouverPointdeSplit(racine->indParams,racine->indexDonnee, racine->cardDonnee, racine->cardParam, racine->hauteur,data);
         racine->seuil = fils->seuil;
         racine->gauche = fils->gauche;
