@@ -2,5 +2,5 @@
 
 ## Elèves impliqués :
 ### - Julie Antoine
-### - Valentin Malqui
+### - Valentin Malquy
 ### - Téodore Autuly
