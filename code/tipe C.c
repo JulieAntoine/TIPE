@@ -398,13 +398,13 @@ void draw_bootstraprand(int len, Foretalea* foret, float data[MAX_COLS][MAX_ROWS
 int main() {
     // Define variables and load dataset
     FILE*file;
-    file = fopen("C:\\Users\\valen\\Desktop\\ProgrammesC\\Resultats.csv", "r");
+    file = fopen("C:\\Users\\valen\\Desktop\\ProgrammesC\\Resultats.csv", "r");     //mettre le chemin d'accès au dossier CSV sur son ordi
     if (file == NULL) {
         perror("Impossible d'ouvrir le fichier");
         return 1;
     }
 
-    char line[1024];
+    char line[1024];                               //à modifier selon le nombre de ligne que l'on a 
     int rows = 0;
     int cols = 0;
     float data[MAX_ROWS][MAX_COLS]; // Matrice pour stocker les données
